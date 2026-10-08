@@ -86,7 +86,7 @@ git init
 git add .
 git commit -m "Gestor de correos Nariñotex"
 git branch -M main
-git remote add origin https://github.com/THEBAT02468/narinotex-correos.git
+git remote add origin https://github.com/tmALEJO/narinotex-correos.git
 git push -u origin main
 ```
 
