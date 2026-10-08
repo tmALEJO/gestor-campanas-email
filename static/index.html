@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nariñotex · Gestor de correos</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="marca">
+    <span class="logo">N</span>
+    <div><h1>Gestor de correos</h1><p id="sub">Nariñotex · base local</p></div>
+  </div>
+  <nav id="tabs">
+    <button data-tab="resumen" class="activo">Resumen</button>
+    <button data-tab="generar">Generar</button>
+    <button data-tab="marcar">Marcar</button>
+    <button data-tab="lotes">Historial</button>
+    <button data-tab="buscar">Buscar</button>
+    <button data-tab="base">Base y sincronizar</button>
+  </nav>
+</header>
+
+<main>
+<!-- ============================ RESUMEN -->
+<section id="tab-resumen" class="tab activo">
+  <div class="cards" id="cards"></div>
+  <div class="grid2">
+    <div class="panel"><h3>Por sección</h3><div id="t-seccion"></div></div>
+    <div>
+      <div class="panel"><h3>Por país</h3><div id="t-pais"></div></div>
+      <div class="panel"><h3>Por proveedor</h3><div id="t-proveedor"></div></div>
+      <div class="panel"><h3>Dominios con más disponibles</h3><div id="t-dominios"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ GENERAR -->
+<section id="tab-generar" class="tab">
+  <div class="grid2">
+    <div class="panel">
+      <div class="cab-panel"><h3>1 · Filtros</h3><button id="btn-limpiar" class="sec peq">Limpiar filtros</button></div>
+
+      <h4>País <small>(nada marcado = todos)</small></h4>
+      <div id="f-paises" class="chips"></div>
+
+      <h4>Proveedor de correo <small>(nada marcado = todos)</small></h4>
+      <div id="f-proveedores" class="chips"></div>
+
+      <label class="check"><input type="checkbox" id="f-genericos"> Excluir genéricos (info@, ventas@, facturacion@…)</label>
+      <label class="check"><input type="checkbox" id="f-verificados"> Solo correos ya verificados como buenos</label>
+
+      <h4>Secciones <small>(nada marcado = todas)</small></h4>
+      <div class="modos">
+        <label><input type="radio" name="modo" value="azar" checked> Al azar entre las elegidas</label>
+        <label><input type="radio" name="modo" value="porcentaje"> Por porcentaje</label>
+        <label><input type="radio" name="modo" value="cantidad"> Cantidad fija por sección</label>
+      </div>
+      <div class="mini-acc">
+        <button class="sec peq" id="sec-todas">Marcar todas</button>
+        <button class="sec peq" id="sec-ninguna">Ninguna</button>
+        <button class="sec peq" id="sec-parejo">Repartir parejo</button>
+        <span id="suma-valores" class="muted"></span>
+      </div>
+      <div id="f-secciones" class="lista-sec"></div>
+      <label class="check"><input type="checkbox" id="f-rellenar" checked> Si una sección no alcanza su %, completar con las demás</label>
+    </div>
+
+    <div>
+      <div class="panel destacado">
+        <div class="big" id="disp-filtros">–</div>
+        <small>correos disponibles con estos filtros</small>
+      </div>
+
+      <div class="panel">
+        <h3>2a · Generar archivo nuevo</h3>
+        <div class="fila">
+          <label>Cantidad<input type="number" id="g-cantidad" min="1" value="100"></label>
+          <label class="crece">Nombre del lote (opcional)<input id="g-nombre" placeholder="ej: campaña textil octubre"></label>
+        </div>
+        <p class="muted" id="g-nota-cantidad" hidden>En modo "cantidad fija" se usa la suma de cada sección.</p>
+        <button id="btn-generar" class="pri">Generar y marcar como usados</button>
+      </div>
+
+      <div class="panel">
+        <h3>2b · Completar un archivo ya verificado</h3>
+        <p class="muted">Sube el archivo con los correos <b>buenos</b> que te dejó el verificador. Se marcan como verificados y te devuelvo ese mismo archivo + los nuevos que pidas (con los filtros de la izquierda), sin repetir usados ni inválidos.</p>
+        <label>Archivo de buenos (.csv, .xlsx, .txt)<input type="file" id="c-archivo" accept=".csv,.txt,.xlsx,.xlsm"></label>
+        <div class="fila">
+          <label>¿Cuántos agrego?<input type="number" id="c-cantidad" min="0" value="50"></label>
+          <label class="crece">Nombre del lote<input id="c-nombre" placeholder="opcional"></label>
+        </div>
+        <button id="btn-completar" class="pri">Completar archivo</button>
+      </div>
+
+      <div class="panel" id="resultado" hidden></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ MARCAR -->
+<section id="tab-marcar" class="tab">
+  <div class="grid2">
+    <div class="panel">
+      <h3>Marcar correos desde archivos</h3>
+      <label>¿Qué contienen estos archivos?
+        <select id="m-estado">
+          <option value="invalido">Inválidos / rebotados (del verificador o de Brevo)</option>
+          <option value="usado">Ya utilizados (enviados antes: los 99, los 246…)</option>
+          <option value="verificado">Verificados como buenos (sin completar)</option>
+          <option value="baja">Bajas / desuscritos / marcaron spam</option>
+        </select>
+      </label>
+      <label>Archivos (puedes elegir varios)<input type="file" id="m-archivos" multiple accept=".csv,.txt,.xlsx,.xlsm"></label>
+      <label>Solo filas que contengan la palabra (opcional)
+        <input id="m-palabra" placeholder="ej: invalid, undeliverable, rebotado">
+      </label>
+      <p class="muted">Úsalo cuando el verificador te devuelva <b>todos</b> los correos con una columna de estado. Así solo se toman las filas que digan esa palabra. Si el archivo trae solo los malos, déjalo vacío.</p>
+      <label>Nota / motivo (opcional)<input id="m-motivo" placeholder="ej: verificador 08-oct"></label>
+      <button id="btn-prev" class="sec">1 · Previsualizar</button>
+      <button id="btn-confirmar" class="pri" disabled>2 · Confirmar y marcar</button>
+    </div>
+    <div class="panel" id="m-res"><h3>Vista previa</h3><p class="muted">Sube un archivo y previsualiza antes de marcar. Nada cambia hasta que confirmes.</p></div>
+  </div>
+</section>
+
+<!-- ============================ LOTES -->
+<section id="tab-lotes" class="tab">
+  <div class="panel">
+    <div class="cab-panel"><h3>Historial de lotes</h3>
+      <label class="check"><input type="checkbox" id="l-extras"> Descargar con columnas extra (nombre, empresa, sección, país, ciudad)</label></div>
+    <p class="muted">"Anular" devuelve a disponibles los correos nuevos de ese lote. Úsalo solo si ese archivo <b>nunca</b> se subió a Brevo.</p>
+    <div id="t-lotes"></div>
+  </div>
+</section>
+
+<!-- ============================ BUSCAR -->
+<section id="tab-buscar" class="tab">
+  <div class="panel">
+    <h3>Buscar un correo o empresa</h3>
+    <input id="b-q" placeholder="escribe al menos 3 letras…">
+    <div id="t-buscar"></div>
+  </div>
+</section>
+
+<!-- ============================ BASE -->
+<section id="tab-base" class="tab">
+  <div class="grid2">
+    <div class="panel">
+      <h3>Excel de origen</h3>
+      <p id="b-excels" class="muted"></p>
+      <p class="muted">Si actualizas el Excel (o agregas otro .xlsx en <code>data/</code>), pulsa importar. Se agregan los correos nuevos y se actualizan los datos; <b>los estados (usado, inválido, baja) se conservan</b>.</p>
+      <button id="btn-importar" class="pri">Importar / actualizar desde Excel</button>
+      <div id="b-reporte"></div>
+    </div>
+    <div>
+      <div class="panel">
+        <h3>Exportar estado</h3>
+        <p class="muted">Para respaldar o para pasárselo a tu compañero.</p>
+        <div class="mini-acc">
+          <a class="btn sec" href="/api/exportar?estado=todos">Todo (usados, inválidos, bajas)</a>
+          <a class="btn sec" href="/api/exportar?estado=usado">Usados</a>
+          <a class="btn sec" href="/api/exportar?estado=invalido">Inválidos</a>
+          <a class="btn sec" href="/api/exportar?estado=disponible">Disponibles</a>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Importar estado de otro equipo</h3>
+        <p class="muted">Sube el archivo "Todo" que exportó tu compañero. Sus usados/inválidos/bajas se aplican aquí sin rebajar nada.</p>
+        <input type="file" id="s-archivo" accept=".csv,.xlsx">
+        <button id="btn-sync" class="pri">Importar estado</button>
+        <div id="s-res"></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div id="toast"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

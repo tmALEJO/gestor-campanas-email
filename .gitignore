@@ -1,0 +1,17 @@
+# Datos personales: NUNCA al repositorio
+data/*.xlsx
+data/*.xls
+data/*.csv
+data/*.db
+data/*.db-*
+data/backups/
+exports/*
+!exports/.gitkeep
+# Python
+.venv/
+__pycache__/
+*.pyc
+# Sistema
+~$*
+.DS_Store
+Thumbs.db
