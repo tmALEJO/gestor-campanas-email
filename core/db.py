@@ -48,7 +48,48 @@ CREATE TABLE IF NOT EXISTS lote_items (
 );
 CREATE TABLE IF NOT EXISTS dominios (dominio TEXT PRIMARY KEY, tiene_mx INTEGER, revisado TEXT);
 CREATE TABLE IF NOT EXISTS meta (clave TEXT PRIMARY KEY, valor TEXT);
+
+-- Verificación con ClearBounce -------------------------------------------------
+-- Un borrador es una selección de correos que AÚN no se marcó como usada.
+CREATE TABLE IF NOT EXISTS borradores (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha     TEXT,
+    tipo      TEXT,      -- generado | completado
+    nombre    TEXT,
+    cantidad  INTEGER,   -- cuántos pidió el usuario (sin contar los buenos subidos en 2b)
+    filtros   TEXT,
+    estado    TEXT,      -- borrador | verificando | listo | generado | descartado
+    lote_id   INTEGER,   -- lote creado al confirmar
+    avisos    TEXT,
+    error     TEXT
+);
+CREATE TABLE IF NOT EXISTS borrador_items (
+    borrador_id INTEGER,
+    email       TEXT,
+    base        INTEGER DEFAULT 0,  -- 1 = venía en el archivo de buenos (2b): no se verifica
+    ronda       INTEGER DEFAULT 1,  -- 2, 3… = agregado con "Reponer"
+    cb_estado   TEXT,               -- deliverable | undeliverable | risky | unknown | NULL (sin verificar)
+    cb_motivo   TEXT,
+    cb_puntaje  INTEGER,
+    cache       INTEGER DEFAULT 0,  -- 1 = resultado reutilizado de una verificación anterior (no gastó crédito)
+    PRIMARY KEY (borrador_id, email)
+);
+CREATE TABLE IF NOT EXISTS cb_jobs (
+    job_id      TEXT PRIMARY KEY,
+    borrador_id INTEGER,
+    total       INTEGER,
+    estimado    INTEGER,
+    creado      TEXT,
+    estado      TEXT,               -- pending | processing | completed | failed
+    progreso    INTEGER DEFAULT 0,
+    aplicado    INTEGER DEFAULT 0   -- 1 = resultados ya guardados en la base
+);
 """
+
+# Columnas nuevas en tablas que ya existían (bases creadas con la versión anterior)
+COLUMNAS_NUEVAS = {
+    "contactos": [("cb_estado", "TEXT"), ("cb_motivo", "TEXT"), ("cb_puntaje", "INTEGER"), ("cb_fecha", "TEXT")],
+}
 
 
 def ahora() -> str:
@@ -59,7 +100,18 @@ def conectar() -> sqlite3.Connection:
     con = sqlite3.connect(DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
     con.executescript(ESQUEMA)
+    _migrar(con)
     return con
+
+
+def _migrar(con):
+    for tabla, columnas in COLUMNAS_NUEVAS.items():
+        existentes = {r[1] for r in con.execute(f"PRAGMA table_info({tabla})")}
+        for nombre, tipo in columnas:
+            if nombre not in existentes:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN {nombre} {tipo}")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_cb_estado ON contactos(cb_estado)")
+    con.commit()
 
 
 def respaldar(motivo: str = "auto"):

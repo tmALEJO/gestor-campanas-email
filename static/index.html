@@ -20,6 +20,9 @@
     <button data-tab="buscar">Buscar</button>
     <button data-tab="base">Base y sincronizar</button>
   </nav>
+  <button id="cb-badge" class="cb-badge" title="Créditos de ClearBounce · clic para actualizar">
+    <i></i><span>ClearBounce…</span>
+  </button>
 </header>
 
 <main>
@@ -50,6 +53,7 @@
 
       <label class="check"><input type="checkbox" id="f-genericos"> Excluir genéricos (info@, ventas@, facturacion@…)</label>
       <label class="check"><input type="checkbox" id="f-verificados"> Solo correos ya verificados como buenos</label>
+      <label class="check"><input type="checkbox" id="f-dudosos" checked> No escoger los que ClearBounce ya calificó como dudosos</label>
 
       <h4>Secciones <small>(nada marcado = todas)</small></h4>
       <div class="modos">
@@ -68,9 +72,15 @@
     </div>
 
     <div>
-      <div class="panel destacado">
-        <div class="big" id="disp-filtros">–</div>
-        <small>correos disponibles con estos filtros</small>
+      <div class="panel destacado dos">
+        <div>
+          <div class="big" id="disp-filtros">–</div>
+          <small>correos disponibles con estos filtros</small>
+        </div>
+        <div class="cb-stat" id="cb-stat">
+          <div class="big" id="cb-creditos">–</div>
+          <small>créditos en ClearBounce <button class="link" id="cb-refrescar" title="Actualizar">↻</button></small>
+        </div>
       </div>
 
       <div class="panel">
@@ -80,7 +90,9 @@
           <label class="crece">Nombre del lote (opcional)<input id="g-nombre" placeholder="ej: campaña textil octubre"></label>
         </div>
         <p class="muted" id="g-nota-cantidad" hidden>En modo "cantidad fija" se usa la suma de cada sección.</p>
-        <button id="btn-generar" class="pri">Generar y marcar como usados</button>
+        <div id="g-creditos-nota" class="nota-cb" hidden></div>
+        <button id="btn-generar" class="pri">Generar vista previa</button>
+        <p class="muted">Todavía no se marca nada: primero ves las estadísticas y decides si verificar con ClearBounce o generar directo.</p>
       </div>
 
       <div class="panel">
@@ -91,12 +103,15 @@
           <label>¿Cuántos agrego?<input type="number" id="c-cantidad" min="0" value="50"></label>
           <label class="crece">Nombre del lote<input id="c-nombre" placeholder="opcional"></label>
         </div>
+        <label class="check"><input type="checkbox" id="c-verificar" checked> Verificar los nuevos con ClearBounce antes de entregar</label>
         <button id="btn-completar" class="pri">Completar archivo</button>
       </div>
-
-      <div class="panel" id="resultado" hidden></div>
     </div>
   </div>
+
+  <!-- Vista previa / verificación (aparece al pulsar Generar o Completar) -->
+  <div class="panel borrador" id="borrador" hidden></div>
+  <div class="panel" id="resultado" hidden></div>
 </section>
 
 <!-- ============================ MARCAR -->

@@ -12,7 +12,7 @@ import webbrowser
 from flask import Flask, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 
-from core import db, servicio
+from core import db, servicio, verificacion
 from core.config import HOST, PUERTO, STATIC_DIR, listar_excels
 
 app = Flask(__name__, static_folder=str(STATIC_DIR), static_url_path="/static")
@@ -31,6 +31,7 @@ def _filtros_de(datos):
         "modo": datos.get("modo") or "azar",
         "excluir_genericos": bool(datos.get("excluir_genericos")),
         "solo_verificados": bool(datos.get("solo_verificados")),
+        "excluir_dudosos": bool(datos.get("excluir_dudosos", True)),
         "rellenar": bool(datos.get("rellenar", True)),
     }
 
@@ -158,6 +159,75 @@ def api_exportar():
     contenido = servicio.exportar_estado(con(), estado)
     return send_file(io.BytesIO(contenido), mimetype="text/csv", as_attachment=True,
                      download_name=f"estado_correos_{estado}.csv")
+
+
+# ------------------------------------------------------------------ ClearBounce
+@app.get("/api/clearbounce/estado")
+def api_cb_estado():
+    return jsonify(verificacion.estado_clearbounce(con(), request.args.get("refrescar", "1") == "1"))
+
+
+@app.get("/api/clearbounce/diagnostico")
+def api_cb_diagnostico():
+    return jsonify(verificacion.diagnostico())
+
+
+@app.get("/api/borradores/pendiente")
+def api_borrador_pendiente():
+    return jsonify(verificacion.pendiente(con()))
+
+
+@app.post("/api/borradores")
+def api_borrador_crear():
+    """Paso 1 de Generar: vista previa (no marca nada)."""
+    datos = request.get_json(force=True)
+    return jsonify(verificacion.crear_borrador(con(), _filtros_de(datos), int(datos.get("cantidad") or 0),
+                                               datos.get("nombre", "")))
+
+
+@app.post("/api/borradores/completar")
+def api_borrador_completar():
+    """2b con verificación: los buenos subidos se respetan y solo se verifican los nuevos."""
+    filtros = _filtros_de(json.loads(request.form.get("filtros") or "{}"))
+    return jsonify(verificacion.crear_borrador_completar(
+        con(), _archivos_subidos(), int(request.form.get("cantidad") or 0), filtros, request.form.get("nombre", "")))
+
+
+@app.get("/api/borradores/<int:bid>")
+def api_borrador(bid):
+    return jsonify(verificacion.resumen_borrador(con(), bid))
+
+
+@app.post("/api/borradores/<int:bid>/verificar")
+def api_borrador_verificar(bid):
+    return jsonify(verificacion.iniciar_verificacion(con(), bid))
+
+
+@app.get("/api/borradores/<int:bid>/progreso")
+def api_borrador_progreso(bid):
+    return jsonify(verificacion.progreso(con(), bid))
+
+
+@app.post("/api/borradores/<int:bid>/reponer")
+def api_borrador_reponer(bid):
+    return jsonify(verificacion.reponer(con(), bid, int(request.get_json(force=True).get("cantidad") or 0)))
+
+
+@app.post("/api/borradores/<int:bid>/confirmar")
+def api_borrador_confirmar(bid):
+    db.respaldar("antes-generar")
+    return jsonify(verificacion.confirmar(con(), bid, request.get_json(force=True).get("dudosos", "fuera")))
+
+
+@app.post("/api/borradores/<int:bid>/descartar")
+def api_borrador_descartar(bid):
+    return jsonify(verificacion.descartar(con(), bid))
+
+
+@app.get("/api/borradores/<int:bid>/reporte")
+def api_borrador_reporte(bid):
+    contenido, nombre = verificacion.reporte_csv(con(), bid)
+    return send_file(io.BytesIO(contenido), mimetype="text/csv", as_attachment=True, download_name=nombre)
 
 
 def preparar():

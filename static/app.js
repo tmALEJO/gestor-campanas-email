@@ -45,7 +45,7 @@ function mostrarTab(t) {
   $$("#tabs button").forEach((b) => b.classList.toggle("activo", b.dataset.tab === t));
   $$(".tab").forEach((s) => s.classList.toggle("activo", s.id === "tab-" + t));
   if (t === "resumen") cargarResumen();
-  if (t === "generar") cargarOpciones();
+  if (t === "generar") { cargarOpciones(); cargarCB(); retomarBorrador(); }
   if (t === "lotes") cargarLotes();
   if (t === "base") cargarBase();
 }
@@ -132,6 +132,7 @@ function pintarSecciones() {
 
 function sumaValores() {
   const suma = [...F.secciones.values()].reduce((a, b) => a + (Number(b) || 0), 0);
+  notaCreditos();
   $("#suma-valores").textContent =
     F.modo === "porcentaje" && F.secciones.size ? `Suma: ${suma}% ${suma !== 100 ? "(se ajusta proporcionalmente)" : "✓"}` :
     F.modo === "cantidad" && F.secciones.size ? `Total: ${fmt(suma)} correos` : "";
@@ -144,6 +145,7 @@ function filtros() {
     secciones: [...F.secciones].map(([nombre, valor]) => ({ nombre, valor: Number(valor) || 0 })),
     excluir_genericos: $("#f-genericos").checked,
     solo_verificados: $("#f-verificados").checked,
+    excluir_dudosos: $("#f-dudosos").checked,
     rellenar: $("#f-rellenar").checked,
   };
 }
@@ -164,7 +166,7 @@ function actualizarConteo() {
 }
 
 $$("input[name=modo]").forEach((r) => (r.onchange = () => { F.modo = r.value; pintarSecciones(); }));
-["#f-genericos", "#f-verificados"].forEach((s) => ($(s).onchange = actualizarConteo));
+["#f-genericos", "#f-verificados", "#f-dudosos"].forEach((s) => ($(s).onchange = actualizarConteo));
 $("#sec-todas").onclick = () => { OPC.secciones.forEach((s) => F.secciones.set(s.nombre, F.secciones.get(s.nombre) ?? "")); pintarSecciones(); actualizarConteo(); };
 $("#sec-ninguna").onclick = () => { F.secciones.clear(); pintarSecciones(); actualizarConteo(); };
 $("#sec-parejo").onclick = () => {
@@ -184,18 +186,68 @@ $("#btn-limpiar").onclick = () => {
   F.paises.clear(); F.proveedores.clear(); F.secciones.clear(); F.modo = "azar";
   $("input[name=modo][value=azar]").checked = true;
   $("#f-genericos").checked = false; $("#f-verificados").checked = false; $("#f-rellenar").checked = true;
+  $("#f-dudosos").checked = true;
   $("#g-nombre").value = ""; $("#c-nombre").value = ""; $("#c-archivo").value = "";
   $("#resultado").hidden = true;
   cargarOpciones();
 };
 
-// ================================================================ generar / completar
+// ================================================================ ClearBounce: créditos
+let CB = { configurado: false, creditos: null };
+
+async function cargarCB(refrescar = true) {
+  try {
+    CB = await api("/api/clearbounce/estado?refrescar=" + (refrescar ? 1 : 0));
+  } catch (e) { CB = { configurado: false, creditos: null, error: e.message }; }
+  pintarCB();
+}
+
+function pintarCB() {
+  const b = $("#cb-badge");
+  const n = CB.creditos;
+  b.className = "cb-badge " + (!CB.configurado ? "off" : CB.error && n == null ? "err" : n != null && n < 50 ? "bajo" : "ok");
+  b.querySelector("span").textContent = !CB.configurado ? "ClearBounce sin configurar"
+    : n == null ? "ClearBounce · ? créditos" : `ClearBounce · ${fmt(n)} créditos`;
+  b.title = CB.error ? CB.error : CB.actualizado ? `Actualizado ${CB.actualizado} · clic para refrescar` : "Clic para refrescar";
+  $("#cb-creditos").textContent = !CB.configurado ? "—" : n == null ? "?" : fmt(n);
+  $("#cb-stat").classList.toggle("off", !CB.configurado);
+  notaCreditos();
+}
+$("#cb-badge").onclick = () => cargarCB();
+$("#cb-refrescar").onclick = () => cargarCB();
+
+function cantidadEfectiva() {
+  if (F.modo === "cantidad" && F.secciones.size) return [...F.secciones.values()].reduce((a, b) => a + (Number(b) || 0), 0);
+  return Number($("#g-cantidad").value) || 0;
+}
+
+function notaCreditos() {
+  const el = $("#g-creditos-nota");
+  if (!el) return;
+  const cant = cantidadEfectiva();
+  if (!CB.configurado) {
+    el.hidden = false; el.className = "nota-cb off";
+    el.innerHTML = `ClearBounce no está configurado: falta <code>CLEARBOUNCE_API_KEY</code> en el archivo <code>.env</code>. Podrás generar sin verificar.`;
+    return;
+  }
+  if (CB.creditos == null || !cant) { el.hidden = true; return; }
+  el.hidden = false;
+  if (cant <= CB.creditos) {
+    el.className = "nota-cb ok";
+    el.innerHTML = `✓ Te alcanza: verificar ${fmt(cant)} correos usa hasta ${fmt(cant)} de tus ${fmt(CB.creditos)} créditos <span class="muted">(los ya verificados hace poco no se cobran).</span>`;
+  } else {
+    el.className = "nota-cb mal";
+    el.innerHTML = `⚠ Tienes ${fmt(CB.creditos)} créditos. Puedes generar ${fmt(cant)}, pero solo verificar ${fmt(CB.creditos)}. Baja la cantidad o recarga créditos.`;
+  }
+}
+$("#g-cantidad").addEventListener("input", notaCreditos);
+
+// ================================================================ generar / completar (con vista previa)
 $("#btn-generar").onclick = (ev) => conCarga(ev.target, async () => {
-  const f = filtros();
   const cantidad = Number($("#g-cantidad").value) || 0;
-  const r = await postJSON("/api/generar", { ...f, cantidad, nombre: $("#g-nombre").value });
-  mostrarResultado(r, "Archivo generado");
-  cargarOpciones();
+  const b = await postJSON("/api/borradores", { ...filtros(), cantidad, nombre: $("#g-nombre").value });
+  $("#resultado").hidden = true;
+  pintarBorrador(b, true);
 });
 
 $("#btn-completar").onclick = (ev) => conCarga(ev.target, async () => {
@@ -206,11 +258,227 @@ $("#btn-completar").onclick = (ev) => conCarga(ev.target, async () => {
   fd.append("cantidad", $("#c-cantidad").value || "0");
   fd.append("nombre", $("#c-nombre").value);
   fd.append("filtros", JSON.stringify(filtros()));
-  const r = await api("/api/completar", { method: "POST", body: fd });
-  mostrarResultado(r, "Archivo completado");
+  if ($("#c-verificar").checked) {
+    const b = await api("/api/borradores/completar", { method: "POST", body: fd });
+    $("#resultado").hidden = true;
+    pintarBorrador(b, true);
+  } else {
+    const r = await api("/api/completar", { method: "POST", body: fd });
+    $("#borrador").hidden = true;
+    mostrarResultado(r, "Archivo completado");
+    cargarOpciones();
+  }
   $("#c-archivo").value = "";
-  cargarOpciones();
 });
+
+// ================================================================ borrador / verificación
+const MOTIVOS = {
+  accepted_email: "aceptado", rejected_email: "el buzón no existe", invalid_domain: "dominio sin servidor de correo",
+  invalid_syntax: "formato inválido", low_quality: "baja calidad (desechable, genérico o con typo)",
+  low_deliverability: "catch-all (el dominio acepta todo)", unavailable_smtp: "el servidor no respondió",
+  unsupported: "servidor no soportado / greylisting", unknown: "desconocido", risky: "riesgoso",
+};
+const motivo = (m) => MOTIVOS[m] || m || "—";
+const POLITICA_TXT = {
+  fuera: "Dejarlos fuera del archivo (siguen en la base, pero no se vuelven a escoger)",
+  catchall: "Incluir solo los catch-all (dominios corporativos que aceptan todo)",
+  incluir: "Incluir todos los dudosos en el archivo",
+  invalidar: "Marcarlos como inválidos",
+};
+let BORR = null, tPoll = null, tReloj = null, politica = "fuera";
+
+async function retomarBorrador() {
+  if (BORR && !$("#borrador").hidden) return;
+  try {
+    const b = await api("/api/borradores/pendiente");
+    if (b) pintarBorrador(b);
+  } catch (e) { /* sin borrador pendiente */ }
+}
+
+function finalEstimado(b) {
+  const g = b.grupos;
+  const dud = politica === "incluir" ? g.dudoso : politica === "catchall" ? b.dudosos_catchall : 0;
+  const nuevos = g.bueno + g.sin_verificar + dud;
+  return { nuevos, total: g.base + nuevos };
+}
+
+function tarjeta(clase, num, titulo, sub = "") {
+  return `<div class="res-card ${clase}"><b>${fmt(num)}</b><span>${titulo}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+}
+
+function pintarBorrador(b, scroll = false) {
+  BORR = b;
+  clearTimeout(tPoll); clearInterval(tReloj);
+  const box = $("#borrador");
+  box.hidden = false;
+  if (b.estado === "verificando") pintarVerificando(b);
+  else if (b.estado === "generado" || b.estado === "descartado") { box.hidden = true; return; }
+  else pintarRevision(b);
+  if (scroll) box.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function cabeceraBorrador(b, titulo) {
+  return `<div class="cab-panel"><h3>${titulo} · borrador #${b.id}${b.nombre ? ` · ${esc(b.nombre)}` : ""}</h3>
+    <span class="muted">${b.tipo === "completado" ? "Completar archivo" : "Archivo nuevo"} · ${esc(b.fecha)}</span></div>`;
+}
+
+function pintarVerificando(b) {
+  const v = b.verificacion || { porcentaje: 0, procesados: 0, total: b.a_verificar, en_vivo: {}, segundos: 0 };
+  const vivo = v.en_vivo || {};
+  const inicio = Date.now() - (v.segundos || 0) * 1000;
+  $("#borrador").innerHTML = cabeceraBorrador(b, "Verificando con ClearBounce") + `
+    <div class="verif">
+      <div class="spinner"></div>
+      <div class="crece">
+        <div class="verif-txt"><b id="v-pct">${v.porcentaje}%</b> · <span id="v-cuenta">${fmt(v.procesados)} de ${fmt(v.total)} correos revisados</span></div>
+        <div class="progreso"><i id="v-barra" style="width:${Math.max(3, v.porcentaje)}%"></i></div>
+        <div class="muted"><span id="v-reloj">0:00</span> transcurrido · <span id="v-falta"></span></div>
+      </div>
+    </div>
+    <div class="chips-vivo">
+      <span class="tag disponible">${fmt(vivo.deliverable)} buenos</span>
+      <span class="tag invalido">${fmt(vivo.undeliverable)} malos</span>
+      <span class="tag dudoso">${fmt((vivo.risky || 0) + (vivo.unknown || 0))} dudosos</span>
+    </div>
+    <p class="muted">No cierres el programa (la ventana negra). Puedes recargar la página o cambiar de pestaña: al volver a <b>Generar</b> se retoma.</p>`;
+  const tick = () => {
+    const seg = Math.floor((Date.now() - inicio) / 1000);
+    $("#v-reloj").textContent = reloj(seg);
+    let falta = null;
+    if (v.porcentaje > 2 && v.porcentaje < 100) falta = Math.round(seg * (100 - v.porcentaje) / v.porcentaje);
+    else if (v.estimado) falta = Math.max(0, v.estimado - seg);
+    $("#v-falta").textContent = falta != null ? `faltan ~${reloj(falta)}` : "calculando…";
+  };
+  tick();
+  tReloj = setInterval(tick, 1000);
+  tPoll = setTimeout(sondear, 4000);
+}
+const reloj = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+async function sondear() {
+  if (!BORR) return;
+  try {
+    const b = await api(`/api/borradores/${BORR.id}/progreso`);
+    if (b.estado !== "verificando") {
+      toast(`Verificación terminada: ${fmt(b.grupos.bueno)} buenos, ${fmt(b.grupos.malo)} malos, ${fmt(b.grupos.dudoso)} dudosos.`);
+      cargarCB(); actualizarConteo();
+    }
+    pintarBorrador(b);
+  } catch (e) {
+    toast(e.message, true);
+    tPoll = setTimeout(sondear, 8000); // reintenta
+  }
+}
+
+function pintarRevision(b) {
+  const g = b.grupos;
+  const verificado = b.verificado_alguna_vez;
+  const fin = finalEstimado(b);
+  const faltan = Math.max(0, b.pedidos - fin.nuevos);
+  const sinCred = CB.configurado && CB.creditos != null && CB.creditos < b.a_verificar;
+  const desglose = Object.entries(b.desglose || {}).sort((x, y) => y[1] - x[1]);
+  const titulo = !verificado ? "Vista previa" : b.a_verificar ? "Verificación parcial" : "Verificación lista";
+
+  let html = cabeceraBorrador(b, titulo);
+  html += (b.avisos || []).map((a) => `<div class="aviso">${esc(a)}</div>`).join("");
+  if (b.error) html += `<div class="aviso error">${esc(b.error)}</div>`;
+
+  // --- tarjetas
+  html += `<div class="res-cards">`;
+  if (g.base) html += tarjeta("base", g.base, "Buenos del archivo subido", "no se verifican de nuevo");
+  if (verificado) {
+    html += tarjeta("bueno", g.bueno, "Buenos", "listos para enviar");
+    html += tarjeta("malo", g.malo, "Malos", g.malo ? "✓ ya marcados como inválidos" : "ninguno");
+    html += tarjeta("dudoso", g.dudoso, "Dudosos", "riesgosos o desconocidos");
+    if (g.sin_verificar) html += tarjeta("pend", g.sin_verificar, "Sin verificar", "todavía no pasan por ClearBounce");
+  } else {
+    html += tarjeta("pend", b.nuevos, "Correos seleccionados", `pediste ${fmt(b.pedidos)}`);
+  }
+  html += `</div>`;
+
+  html += `<div class="grid2 rev">`;
+  // --- columna izquierda: detalle
+  html += `<div>`;
+  if (desglose.length) html += `<details ${verificado ? "" : "open"}><summary>Por sección (${desglose.length})</summary>${tabla([{ t: "Sección", f: (x) => esc(x[0]) }, { t: "Correos", n: 1, f: (x) => fmt(x[1]) }], desglose)}</details>`;
+  if (b.malos.length) html += `<details open><summary class="t-malo">Malos · marcados como inválidos (${fmt(g.malo)})</summary>
+      ${tabla([{ t: "Correo", k: "email" }, { t: "Motivo", f: (x) => `<span class="muted">${esc(motivo(x.motivo))}</span>` }], b.malos)}</details>`;
+  if (b.dudosos.length) html += `<details ${b.malos.length ? "" : "open"}><summary class="t-dudoso">Dudosos (${fmt(g.dudoso)})</summary>
+      <p class="muted">${Object.entries(b.motivos_dudosos).map(([k, n]) => `${esc(motivo(k))}: <b>${fmt(n)}</b>`).join(" · ")}</p>
+      ${tabla([{ t: "Correo", k: "email" }, { t: "Motivo", f: (x) => `<span class="muted">${esc(motivo(x.motivo))}</span>` }, { t: "Puntaje", n: 1, f: (x) => x.puntaje ?? "" }], b.dudosos)}</details>`;
+  if (verificado) html += `<p><a class="btn sec peq" href="/api/borradores/${b.id}/reporte">Descargar reporte completo de la verificación (CSV)</a></p>`;
+  html += `</div>`;
+
+  // --- columna derecha: acciones
+  html += `<div class="acciones-borr">`;
+  if (b.a_verificar) {
+    html += `<div class="caja-cb">
+      <h4>Verificar con ClearBounce</h4>
+      <p>${fmt(b.a_verificar)} correos por verificar = <b>${fmt(b.a_verificar)} créditos</b>.
+      ${CB.creditos != null ? `Tienes <b>${fmt(CB.creditos)}</b> → te quedarían <b>${fmt(Math.max(0, CB.creditos - b.a_verificar))}</b>.` : ""}</p>
+      ${b.reutilizados ? `<p class="muted">${fmt(b.reutilizados)} ya se habían verificado hace poco: se reutiliza su resultado sin gastar créditos.</p>` : ""}
+      ${!CB.configurado ? `<div class="aviso">Falta la API key en <code>.env</code>. Puedes generar sin verificar.</div>` : ""}
+      ${sinCred ? `<div class="aviso error">No te alcanzan los créditos. Descarta y genera menos correos, o recarga en ClearBounce.</div>` : ""}
+      <button class="pri" id="b-verificar" ${!CB.configurado || sinCred ? "disabled" : ""}>Verificar ${fmt(b.a_verificar)} correos</button>
+    </div>`;
+  }
+  if (verificado && (g.dudoso || 0) > 0) {
+    html += `<h4>¿Qué hago con los ${fmt(g.dudoso)} dudosos?</h4><div class="politicas">` +
+      Object.entries(POLITICA_TXT).filter(([k]) => k !== "catchall" || b.dudosos_catchall)
+        .map(([k, t]) => `<label class="check"><input type="radio" name="politica" value="${k}" ${politica === k ? "checked" : ""}> ${t}${k === "catchall" ? ` (${fmt(b.dudosos_catchall)})` : ""}</label>`).join("") + `</div>`;
+  }
+  if (verificado && faltan > 0 && !b.a_verificar) {
+    html += `<div class="caja-reponer">
+      <p>Pediste <b>${fmt(b.pedidos)}</b> y quedan <b>${fmt(fin.nuevos)}</b> buenos. ¿Reponer los que faltan?</p>
+      <div class="fila"><label>Cantidad<input type="number" id="b-reponer-n" min="1" value="${faltan}"></label></div>
+      <button class="sec" id="b-reponer" ${!CB.configurado ? "disabled" : ""}>Reponer y verificar</button>
+      <p class="muted">Escoge nuevos con los mismos filtros (sin repetir) y los pasa por ClearBounce.</p>
+    </div>`;
+  }
+  html += `<div class="final">
+      <p>El archivo tendrá <b id="b-final">${fmt(fin.total)}</b> correos${g.base ? ` (${fmt(g.base)} subidos + <span id="b-final-n">${fmt(fin.nuevos)}</span> nuevos)` : ""}.
+      ${g.sin_verificar && verificado ? `<br><span class="muted">Incluye ${fmt(g.sin_verificar)} sin verificar.</span>` : ""}</p>
+      <button class="pri" id="b-confirmar">${verificado ? "Generar archivo y marcar como usados" : "Generar sin verificar"}</button>
+      <button class="sec peligro" id="b-descartar">Descartar</button>
+    </div>`;
+  html += `</div></div>`;
+  $("#borrador").innerHTML = html;
+
+  $$("input[name=politica]").forEach((r) => (r.onchange = () => {
+    politica = r.value;
+    const f = finalEstimado(BORR);
+    $("#b-final").textContent = fmt(f.total);
+    if ($("#b-final-n")) $("#b-final-n").textContent = fmt(f.nuevos);
+    if ($("#b-reponer-n")) $("#b-reponer-n").value = Math.max(1, BORR.pedidos - f.nuevos);
+  }));
+  if ($("#b-verificar")) $("#b-verificar").onclick = (ev) => conCarga(ev.target, async () => {
+    pintarBorrador(await api(`/api/borradores/${b.id}/verificar`, { method: "POST" }));
+    cargarCB();
+  });
+  if ($("#b-reponer")) $("#b-reponer").onclick = (ev) => conCarga(ev.target, async () => {
+    const n = Number($("#b-reponer-n").value) || 0;
+    if (CB.creditos != null && n > CB.creditos) throw new Error(`Solo tienes ${fmt(CB.creditos)} créditos: repón ${fmt(CB.creditos)} o menos.`);
+    const r = await postJSON(`/api/borradores/${b.id}/reponer`, { cantidad: n });
+    if (!r.a_verificar) return pintarBorrador(r);
+    try {
+      pintarBorrador(await api(`/api/borradores/${b.id}/verificar`, { method: "POST" }));
+      cargarCB();
+    } catch (e) { pintarBorrador(r); throw e; }
+  });
+  $("#b-confirmar").onclick = (ev) => conCarga(ev.target, async () => {
+    if (!verificado && CB.configurado && !confirm("¿Generar SIN verificar con ClearBounce? Los correos quedarán marcados como usados.")) return;
+    const r = await postJSON(`/api/borradores/${b.id}/confirmar`, { dudosos: politica });
+    $("#borrador").hidden = true; BORR = null; politica = "fuera";
+    mostrarResultado(r, r.clearbounce ? "Archivo verificado y generado" : "Archivo generado");
+    cargarOpciones();
+  });
+  $("#b-descartar").onclick = (ev) => conCarga(ev.target, async () => {
+    if (!confirm("¿Descartar este borrador? No se marca nada como usado (los malos ya detectados siguen como inválidos).")) return;
+    await api(`/api/borradores/${b.id}/descartar`, { method: "POST" });
+    $("#borrador").hidden = true; BORR = null; politica = "fuera";
+    toast("Borrador descartado.");
+    actualizarConteo();
+  });
+}
 
 function enlaces(id, extras) {
   const x = extras ? 1 : 0;
@@ -228,6 +496,7 @@ function mostrarResultado(r, titulo) {
     ${desglose.length ? tabla([{ t: "Sección", f: (x) => esc(x[0]) }, { t: "Nuevos", n: 1, f: (x) => fmt(x[1]) }], desglose) : ""}
     <label class="check"><input type="checkbox" id="r-extras"> Incluir columnas extra (nombre, empresa, sección, país, ciudad)</label>
     <div class="mini-acc" id="r-links">${enlaces(r.lote_id, false)}</div>
+    ${r.borrador_id && r.clearbounce ? `<p><a class="btn sec peq" href="/api/borradores/${r.borrador_id}/reporte">Reporte de verificación (CSV)</a></p>` : ""}
     <p class="muted">También se guardó una copia en <code>exports/${esc(r.copia)}</code>.</p>`;
   $("#r-extras").onchange = (e) => ($("#r-links").innerHTML = enlaces(r.lote_id, e.target.checked));
   box.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -370,3 +639,4 @@ $("#btn-sync").onclick = (ev) => conCarga(ev.target, async () => {
 
 // ================================================================ inicio
 cargarResumen();
+cargarCB();

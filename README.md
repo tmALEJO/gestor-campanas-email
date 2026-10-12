@@ -11,6 +11,7 @@ BDD_NARIÑOTEX.xlsx  ──(limpieza)──►  data/correos.db  ◄──►  a
 
 - El **Excel nunca se modifica**. Es la fuente de datos.
 - Los estados (disponible, usado, inválido, baja) viven en `data/correos.db` (SQLite, un solo archivo).
+- La API key de ClearBounce vive en `.env` y solo la usa el servidor Python: nunca llega a la página.
 - La página no se abre con doble clic al `.html`: un navegador no puede escribir archivos del disco por seguridad. Por eso hay un servidor Python pequeño que corre solo en tu PC. El doble clic va en `iniciar.bat`.
 
 ## Estructura
@@ -22,12 +23,16 @@ narinotex-correos/
 ├── iniciar.bat         doble clic en Windows
 ├── iniciar.sh          Mac / Linux
 ├── requirements.txt
+├── .env.example        plantilla de la API key de ClearBounce (cópiala como .env)
+├── .env                ← TU API key (no va a GitHub)
 ├── core/
 │   ├── config.py       rutas y ajustes
 │   ├── correos.py      reglas de validación, typos, proveedores, genéricos
 │   ├── archivos.py     lectura del Excel y de archivos subidos; salida CSV/Excel para Brevo
 │   ├── db.py           esquema SQLite y respaldos
-│   └── servicio.py     generar, completar, marcar, lotes, exportar/importar estado
+│   ├── servicio.py     generar, completar, marcar, lotes, exportar/importar estado
+│   ├── clearbounce.py  cliente de la API de ClearBounce (créditos, subir lista, progreso, resultados)
+│   └── verificacion.py borradores: vista previa → verificar → reponer → generar
 ├── static/             index.html, app.js, styles.css
 ├── data/               ← aquí va BDD_NARIÑOTEX.xlsx (y se crea correos.db y backups/)
 └── exports/            copia de cada archivo generado + reporte de descartados
@@ -58,14 +63,25 @@ En la pestaña **Marcar**, elige "Ya utilizados" y sube:
 
 Si alguno de esos correos no está en el Excel, se registra igual (sección "Externo") para que nunca se vuelva a escoger.
 
-## Flujo normal
+## Flujo normal (con ClearBounce)
 
-1. **Generar** → filtros (país, proveedor, secciones con % o cantidad) → cantidad → descargar CSV.
-2. Subes ese CSV al verificador.
-3. **Marcar** → "Inválidos" → subes el archivo de malos → previsualizar → confirmar.
-4. **Generar → 2b Completar** → subes el archivo de buenos + cuántos agregar → descargas el archivo completo.
-5. Los nuevos que agregó también deben pasar por el verificador (repite 2-4 hasta que todo esté limpio).
+1. **Generar** → filtros → cantidad → **Generar vista previa**. Todavía no se marca nada.
+2. **Verificar con ClearBounce**: barra de progreso con tiempo transcurrido y restante.
+3. Resultado en pantalla: **Buenos / Malos / Dudosos**. Los malos ya quedan marcados como inválidos.
+   Para los dudosos eliges: dejarlos fuera, incluir solo catch-all, incluir todos o marcarlos inválidos.
+4. Si faltan para llegar a lo que pediste → **Reponer y verificar** (escoge nuevos y los verifica).
+5. **Generar archivo y marcar como usados** → descargas el CSV/Excel solo con los buenos.
 6. Subes a Brevo. Después, los rebotes y desuscritos de Brevo van a **Marcar** como "Inválidos" o "Bajas".
+
+Sin ClearBounce: en la vista previa pulsa **Generar sin verificar** (hace lo mismo que antes).
+En **2b Completar** la casilla "Verificar los nuevos con ClearBounce" hace que solo los correos agregados pasen por la verificación.
+
+### Créditos
+
+- Cada correo verificado gasta 1 crédito. El saldo se ve arriba a la derecha y junto a la cantidad.
+- Un correo verificado hace menos de `CB_DIAS_CACHE` días (30 por defecto) no se vuelve a pagar.
+- Los dudosos quedan recordados: la casilla "No escoger los que ClearBounce ya calificó como dudosos" evita volver a escogerlos.
+- Diagnóstico de la conexión: abre `http://127.0.0.1:5050/api/clearbounce/diagnostico` (la API key sale oculta).
 
 ## Estados y prioridad
 
@@ -90,7 +106,7 @@ git remote add origin https://github.com/tmALEJO/narinotex-correos.git
 git push -u origin main
 ```
 
-Antes del primer push, revisa con `git status` que no aparezca ningún `.xlsx`, `.db` ni `.csv`.
+Antes del primer push, revisa con `git status` que no aparezca ningún `.xlsx`, `.db`, `.csv` **ni `.env`**.
 
 ## Respaldos
 

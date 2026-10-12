@@ -7,6 +7,10 @@ data/*.db-*
 data/backups/
 exports/*
 !exports/.gitkeep
+# API keys (ClearBounce): NUNCA al repositorio
+.env
+.env.*
+!.env.example
 # Python
 .venv/
 __pycache__/

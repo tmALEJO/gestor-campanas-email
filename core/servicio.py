@@ -171,6 +171,9 @@ def _where(f):
         cond.append("generico=0")
     if f.get("solo_verificados"):
         cond.append("verificado=1")
+    if f.get("excluir_dudosos"):
+        # Correos que ClearBounce ya calificó como riesgosos/desconocidos: no se vuelven a escoger
+        cond.append("(cb_estado IS NULL OR cb_estado='deliverable')")
     return " AND ".join(cond), params
 
 
@@ -215,9 +218,13 @@ def repartir(total, pesos, disponibles, rellenar=True):
     return cuotas, faltante
 
 
-def seleccionar(con, f, cantidad):
-    """Devuelve (emails elegidos al azar, avisos, desglose por sección). No modifica nada."""
+def seleccionar(con, f, cantidad, excluir_borrador=None):
+    """Devuelve (emails elegidos al azar, avisos, desglose por sección). No modifica nada.
+    excluir_borrador: id de un borrador cuyos correos no se deben repetir (al "Reponer")."""
     where, params = _where(f)
+    if excluir_borrador is not None:
+        where += " AND email NOT IN (SELECT email FROM borrador_items WHERE borrador_id=?)"
+        params = params + [excluir_borrador]
     modo = f.get("modo") or "azar"
     secciones = [s for s in (f.get("secciones") or []) if s.get("nombre")]
     nombres = [s["nombre"] for s in secciones]
