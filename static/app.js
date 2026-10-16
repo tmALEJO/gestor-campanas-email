@@ -76,7 +76,7 @@ async function cargarResumen() {
     $("#t-pais").innerHTML = tabla(cols("por_pais"), d.por_pais);
     $("#t-proveedor").innerHTML = tabla(cols("por_proveedor"), d.por_proveedor);
     $("#t-dominios").innerHTML = tabla([{ t: "Dominio", k: "nombre" }, { t: "Disponibles", n: 1, f: (x) => fmt(x.disponible) }], d.top_dominios);
-    $("#sub").textContent = d.excels.length ? `Nariñotex · ${d.excels.join(", ")}` : "Nariñotex · ⚠ no hay Excel en data/";
+    $("#sub").textContent = d.excels.length ? `Base: ${d.excels.join(", ")}` : "⚠ no hay Excel en data/";
   } catch (e) { toast(e.message, true); }
 }
 

@@ -1,4 +1,4 @@
-# Gestor de correos · Nariñotex
+# Gestor de campañas de email
 
 Herramienta local para limpiar la base de compradores, elegir correos al azar con filtros, descargarlos listos para Brevo y llevar el control de cuáles ya se usaron, cuáles son inválidos y cuáles se dieron de baja.
 
@@ -17,7 +17,7 @@ BDD_NARIÑOTEX.xlsx  ──(limpieza)──►  data/correos.db  ◄──►  a
 ## Estructura
 
 ```
-narinotex-correos/
+Gestor de campañas de email/
 ├── app.py              servidor local (rutas de la página)
 ├── limpiar.py          limpieza por consola (opcional: --mx)
 ├── iniciar.bat         doble clic en Windows
@@ -100,9 +100,9 @@ Repositorio **privado**. El `.gitignore` ya excluye el Excel, la base, los respa
 ```powershell
 git init
 git add .
-git commit -m "Gestor de correos Nariñotex"
+git commit -m "Gestor de campañas de email"
 git branch -M main
-git remote add origin https://github.com/tmALEJO/narinotex-correos.git
+git remote add origin https://github.com/tmALEJO/gestor-campanas-email.git
 git push -u origin main
 ```
 

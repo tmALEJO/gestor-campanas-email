@@ -1,5 +1,5 @@
 """
-Servidor local del gestor de correos Nariñotex.
+Servidor local del Gestor de campañas de email.
 
 Ejecuta:  python app.py      (o doble clic en iniciar.bat)
 Abre solo el navegador en http://127.0.0.1:5050
@@ -244,6 +244,6 @@ def preparar():
 if __name__ == "__main__":
     preparar()
     url = f"http://{HOST}:{PUERTO}"
-    print(f"\n  Gestor de correos listo en {url}\n  (deja esta ventana abierta; ciérrala para apagarlo)\n")
+    print(f"\n  Gestor de campañas de email listo en {url}\n  (deja esta ventana abierta; ciérrala para apagarlo)\n")
     threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     app.run(host=HOST, port=PUERTO, debug=False, threaded=True)

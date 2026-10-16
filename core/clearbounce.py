@@ -59,7 +59,7 @@ def _peticion(metodo, ruta, cuerpo=None):
         "X-API-Key": cfg["api_key"],
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "User-Agent": "NarinotexCorreos/1.0",
+        "User-Agent": "GestorCampanasEmail/1.0",
     })
     try:
         with urllib.request.urlopen(req, timeout=cfg["timeout"]) as r:
